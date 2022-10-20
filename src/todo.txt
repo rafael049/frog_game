@@ -1,0 +1,3 @@
+- texturas
+- anti-aliasing
+- iluminação deferred
