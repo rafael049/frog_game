@@ -1,9 +1,20 @@
-pub extern crate nphysics2d;
+pub extern crate nphysics3d;
 
-use nphysics2d::nalgebra as na;
+use nphysics3d::nalgebra as na;
 
+
+use std::cell::RefCell;
 use std::rc::Rc;
+use std::rc::Weak;
 
+pub type Rcell<T> = Rc<RefCell<T>>;
+pub type Wcell<T> = Weak<RefCell<T>>;
+
+//impl Rcell<T> {
+//		pub fn new(v: T) -> Rcell<T> {
+//				Rc::new(RefCell::new(v))
+//		}
+//}
 
 pub type Vec2 = na::Vector2<f32>;
 pub type Vec3 = na::Vector3<f32>;

@@ -10,5 +10,10 @@ uniform sampler2D tex;
 
 
 void main() {
-	f_color = texture(tex, k_uv);
+	vec4 tex = texture(tex, k_uv);
+
+	if (tex.w < 0.5)
+		discard;
+	
+	f_color = tex;
 }

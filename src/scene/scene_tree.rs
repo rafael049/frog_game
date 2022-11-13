@@ -18,15 +18,11 @@ pub struct Tree<T> {
 		pub obj: Rcell<T>,
 }
 
-//pub struct Node<T> {
-//		parent: Rcell<Node<T>>,
-//		children: Vec<Rcell<Node<T>>>,
-//		item: T,
-//}
-
 pub struct Scene {
 		pub root: Rcell<Tree<Object>>,
 		pub table: HashMap<String, Rcell<Tree<Object>> >,
+
+		camera_key: String,
 }
 
 
@@ -41,10 +37,12 @@ impl Scene {
 				let root = Rc::new(RefCell::new(node));
 				let mut table = HashMap::new();
 				table.insert("root".to_string(), root.clone());
+				let camera_key = String::from("camera");
 
 				Scene {
 						root,
 						table,
+						camera_key,
 				}
 		}
 
@@ -54,7 +52,7 @@ impl Scene {
 						Some(x) => x.clone(),
 						None => panic!("Parent node '{}' does not exist", parent_key),
 				};
-				let mut parent_rc = Rc::downgrade(&parent_node);
+				let parent_rc = Rc::downgrade(&parent_node);
 				let node = Rc::new(RefCell::new(
 						Tree {
 								parent: Some(parent_rc),
@@ -66,6 +64,20 @@ impl Scene {
 				self.table.insert(name, node.clone());
 
 				parent_node.borrow_mut().children.push(node);
+		}
+
+		pub fn add_camera(&mut self, parent_key: &str, obj: &Rcell<Object>) {
+				self.add_child(parent_key, obj);
+				let name = RefCell::borrow(&obj).name.clone();
+				self.camera_key = name;
+		}
+
+		pub fn set_camera(&mut self, key: &str) {
+				self.camera_key = String::from(key);
+		}
+
+		pub fn get_camera(&self) -> Option<Rcell<TreeObj>> {
+				return self.get_node(&self.camera_key);
 		}
 
 		pub fn foreach<F>(&self, mut function: F ) where F: FnMut(&object::Object){

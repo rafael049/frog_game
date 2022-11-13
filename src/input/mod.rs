@@ -212,6 +212,7 @@ pub enum ActionInput {
 		DIRECTIONAL(Vec2),
 		ANALOGIC(f32),
 		DIGITAL(bool),
+		NONE,
 }
 
 
@@ -486,13 +487,13 @@ impl Input {
 
 								if dir.amax() > 0.0 {
 										dir = dir.normalize();
+										return ActionInput::DIRECTIONAL(dir);
 								}
+								return ActionInput::NONE;
 
-								return ActionInput::DIRECTIONAL(dir);
 						},
 						ActionID::LOOK => {
 								let dir = vec2(self.mouse_delta.0, self.mouse_delta.1);
-
 
 								return ActionInput::DIRECTIONAL(dir);
 						},

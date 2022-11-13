@@ -1,15 +1,14 @@
 pub mod transform;
 pub mod material;
+pub mod camera;
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::utils::*;
+use crate::{utils::*, behavior};
 use crate::behavior::Behavior;
-use crate::resources::Texture;
-use crate::resources::{Vertex};
+use crate::resources::{Vertex, Texture};
 use crate::input::Input;
-use crate::input::{ActionID, ActionInput};
 use crate::physics::{RigidBody, Collider};
 
 pub type Rcell<T> = Rc<RefCell<T>>;
@@ -26,6 +25,7 @@ pub struct Object {
 		pub behavior: Option<Behavior>,
 		pub rigid_body: Option<RigidBody>,
 		pub collider: Option<Collider>,
+		pub camera: Option<camera::Camera>
 }
 
 impl Object {
@@ -40,6 +40,7 @@ impl Object {
 						behavior: None,
 						rigid_body: None,
 						collider: None,
+						camera: None,
 				}
 		}
 
@@ -56,6 +57,7 @@ impl Object {
 										behavior: None,
 										rigid_body: None,
 										collider: None,
+										camera: None,
 								}))
 		}
 
@@ -70,15 +72,23 @@ impl Object {
 						behavior: None,
 						rigid_body: None,
 						collider: None,
+						camera: None,
 				}
 		}
 
 		pub fn update(&mut self, delta: f32, input: &Input) {
 
-				let mut behavior = self.behavior.as_mut().unwrap();
-				behavior.update(delta, input);
-				let speed = 0.1;
-				let mut pos = self.transform.as_mut().unwrap().get_position();
+				// Execute behavior
+				match self.behavior.as_mut() {
+						Some(behavior) => {
+								behavior.update(delta, input);
+								println!("Obj <{}> has behavior", self.name);
+						},
+						None => {println!("Obj <{}> do not have behavior", self.name);},
+				}
+				
+				//let speed = 0.1;
+				//let mut pos = self.transform.as_mut().unwrap().get_position();
 
 				/*
 				match input.get_actions(ActionID::MOVE) {
@@ -90,5 +100,27 @@ impl Object {
 						_ => (),
 				}
 				*/
+		}
+
+		pub fn model_transform(&self) -> Mat4 {
+				let model_mat = self.transform.as_ref().unwrap().model_mat;
+				return model_mat;
+		}
+
+		pub fn global_transform(&self) -> Mat4 {
+
+				let model_mat = match &self.transform {
+						Some(trsf) => trsf.model_mat,
+						_ => mat4id(),
+				};
+
+				let body_mat = match &self.rigid_body {
+						Some(rb) => rb.get_body().position().to_homogeneous(),
+						None => mat4id(),
+				};
+
+				let global_mat = body_mat * model_mat;
+
+				return global_mat;
 		}
 }

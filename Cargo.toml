@@ -11,4 +11,4 @@ nalgebra = "*"
 json = "*"
 image = "*"
 mlua = { version = "0.8", features = ["lua54", "vendored"]}
-nphysics2d = "*"
+nphysics3d = "*"

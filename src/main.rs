@@ -15,70 +15,90 @@ mod object;
 mod shader;
 mod scene;
 mod physics;
+mod renderer;
 
+use glium::Display;
+use glium::glutin::ContextBuilder;
+use glium::glutin::window::WindowBuilder;
 #[allow(unused_imports)]
 use glium::{glutin, Surface};
-use nalgebra::ComplexField;
-use nphysics2d::nalgebra::{Vector2, Unit};
-use nphysics2d::ncollide2d::shape::{Cuboid, ShapeHandle, self};
-use nphysics2d::force_generator::DefaultForceGeneratorSet;
-use nphysics2d::joint::DefaultJointConstraintSet;
-use nphysics2d::object::{
-    DefaultBodySet, DefaultColliderSet, Ground, ColliderDesc, BodyPartHandle,
+use nphysics3d::math::Point;
+use nphysics3d::algebra::Force3;
+use nphysics3d::algebra::ForceType;
+use nphysics3d::math::Velocity;
+use nphysics3d::nalgebra::Isometry;
+use nphysics3d::nalgebra::Translation3;
+use nphysics3d::nalgebra::UnitQuaternion;
+use nphysics3d::nalgebra::Vector2;
+use nphysics3d::ncollide3d::shape::{Cuboid, ShapeHandle, self};
+use nphysics3d::force_generator::DefaultForceGeneratorSet;
+use nphysics3d::joint::DefaultJointConstraintSet;
+use nphysics3d::object::BodyStatus;
+use nphysics3d::object::{
+    DefaultBodySet, DefaultColliderSet, Ground, ColliderDesc, BodyPartHandle, Body,
 };
-use nphysics2d::world::{DefaultGeometricalWorld, DefaultMechanicalWorld};
+use nphysics3d::world::{DefaultGeometricalWorld, DefaultMechanicalWorld};
 
 
+use crate::physics::physics_engine::PhysicsEngine;
 use crate::physics::{RigidBody, Collider};
+use crate::renderer::Renderer;
 use crate::utils::*;
-use crate::behavior::Behavior;
 use crate::input::{ActionInput, KeyState};
 
 
 fn main() {
+		// Initializing
+    let event_loop = glutin::event_loop::EventLoop::new();
+		let window_builder = WindowBuilder::new();
+		let context_builder = ContextBuilder::new().with_hardware_acceleration(Some(true)).with_vsync(true);
+		let display = Display::new(window_builder, context_builder, &event_loop).unwrap();
 
-		let mut mechanical_world = DefaultMechanicalWorld::<f32>::new(vec2(0.0f32, -9.81f32));
-    let mut geometrical_world = DefaultGeometricalWorld::<f32>::new();
-
-    let mut bodies = DefaultBodySet::<f32>::new();
-    let mut colliders = DefaultColliderSet::<f32>::new();
-
-    let mut joint_constraints = DefaultJointConstraintSet::<f32>::new();
-    let mut force_generators = DefaultForceGeneratorSet::<f32>::new();
-
+		// Create renderer
+		let mut renderer = Renderer::new(&display);
+		
+		// Physics Engine
+		let mut physics_engine = PhysicsEngine::new();
 
 		// Add ground
-		let ground_shape = ShapeHandle::new(Cuboid::new(Vec2::new(100.0, 1.0)));
-		let ground_handle = bodies.insert(Ground::new());
+		let ground_shape = ShapeHandle::new(shape::Polyline::new(vec![Point::new(-5.0, -10.0, 0.0), Point::new(5.0, -10.0, 0.0)], None));
+		let ground_handle = physics_engine.bodies.insert(Ground::new());
 		let ground_co = ColliderDesc::new(ground_shape)
-				.translation(Vec2::new(0.0, -3.0))
+				.translation(Vec3::new(0.0, -3.0, 0.0))
 				.build(BodyPartHandle(ground_handle, 0));
-		colliders.insert(ground_co);
+		physics_engine.colliders.insert(ground_co);
 
-
-    let event_loop = glutin::event_loop::EventLoop::new();
-    let wb = glutin::window::WindowBuilder::new();
-    let cb = glutin::ContextBuilder::new().with_hardware_acceleration(Some(true)).with_vsync(true);
-    let display = glium::Display::new(wb, cb, &event_loop).unwrap();
-
-		let mut window_size: (u32, u32) = (display.gl_window().window().inner_size().width,
-																			 display.gl_window().window().inner_size().height);
+		// Mouse position
 		let mut mouse_pos: (u32, u32) = (0, 0);
 
+		// Resource manager
 		let mut rsrc = resources::Resources::new();
-		let mut camera = camera::Camera::new();
+		// Input manager
 		let mut input = input::Input::new();
-		//let mut object = object::Object::new();
-		let mut shader = shader::Shader::new(&display, "shaders/vertex_default.glsl", "shaders/fragment_default.glsl").unwrap();
-    let texture = rsrc.get_texture("textures/teste.png", &display);
-    let texture2 = rsrc.get_texture("textures/teste2.png", &display);
-		let script_teste = rsrc.get_script("scripts/teste.lua");
 
-
-		let aspect = window_size.0 as f32 / window_size.1 as f32;
+		// Main camera
+		let camera_behavior = behavior::camera_behavior::CameraBehavior::new();
+		let mut camera_obj = object::Object::new_empty("camera");
+		let mut camera = object::camera::Camera::new();
+		let aspect = renderer.window_size.0 as f32 / renderer.window_size.1 as f32;
 		camera.aspect = aspect;
 		camera.zoom = 2.0;
+		camera_obj.camera.replace(camera);
+		let camera_obj = Rc::new(RefCell::new(camera_obj));
+		let behavior = behavior::Behavior::new(Box::new(camera_behavior), &mut camera_obj.borrow_mut());
+		RefCell::borrow_mut(&camera_obj).behavior = Some(behavior);
 
+		// Main shader
+		let mut shader = shader::Shader::new(&display, "shaders/vertex_default.glsl", "shaders/fragment_default.glsl").unwrap();
+
+		// Textures
+    let sapo_texture = rsrc.get_texture("textures/sapo.png", &display);
+    let texture2 = rsrc.get_texture("textures/teste2.png", &display);
+    let mapa_tex = rsrc.get_texture("textures/mapa_teste.png", &display);
+		// Script
+		let script_teste = rsrc.get_script("scripts/teste.lua");
+
+		// Plane vertex buffer
     let vertex_buffer = {
 				let mesh = rsrc.get_mesh("plane");
 				let mesh_b = (*mesh).borrow();
@@ -88,35 +108,61 @@ fn main() {
     };
 		let rcell_vertex_buffer = Rc::new(RefCell::new(vertex_buffer));
 
-		let mut obj1 = object::Object::new_handler("obj1", rcell_vertex_buffer.clone(), texture.clone());
+		// Create objs
+		let mut player_obj = object::Object::new_handler("player", rcell_vertex_buffer.clone(), sapo_texture.clone());
 		let mut obj2 = object::Object::new_handler("obj2", rcell_vertex_buffer.clone(), texture2.clone());
+		let mut mapa_obj = object::Object::new_handler("mapa_teste", rcell_vertex_buffer.clone(), mapa_tex);
+
 		// Add Behavior
-		let down = Rc::downgrade(&obj2);
-		let behavior = Behavior::new(&script_teste, &down);
-		RefCell::borrow_mut(&obj2).behavior = Some(behavior);
+		{
+				let player_behavior = Box::new(behavior::player_behavior::PlayerBehavior::new());
+				let behavior = behavior::Behavior::new(player_behavior, &mut player_obj.borrow_mut());
+				RefCell::borrow_mut(&player_obj).behavior = Some(behavior);
+		}
 
-		// Add Rigid Body
-		let rigid_body = RigidBody::new(&mut bodies, 1.5, 5.0);
-    let cuboid = ShapeHandle::new(Cuboid::new(Vector2::repeat(1.0)));
+		// Add Rigid Body to obj1
+		let rigid_body = RigidBody::new(&mut physics_engine.bodies, BodyStatus::Dynamic, -1.0, 2.0);
+    let cuboid = ShapeHandle::new(Cuboid::new(vec3(0.5, 0.5, 1.0)));
 		// Build the collider.
-		let collider = Collider::new(&mut colliders, rigid_body.handle, cuboid);
+		let collider = Collider::new(&mut physics_engine.colliders, rigid_body.handle, cuboid);
 
-		obj1.borrow_mut().rigid_body.replace(rigid_body);
-		obj1.borrow_mut().collider.replace(collider);
+		player_obj.borrow_mut().rigid_body.replace(rigid_body);
+		player_obj.borrow_mut().collider.replace(collider);
 
-		// Add Rigid Body
-		let rigid_body = RigidBody::new(&mut bodies, 3.3, 2.0);
-    let cuboid = ShapeHandle::new(shape::Ball::new(1.0));
+		// Add Rigid Body to obj2
+		let rigid_body = RigidBody::new(&mut physics_engine.bodies, BodyStatus::Dynamic, -5.0, 0.0);
+    let cuboid = ShapeHandle::new(shape::Cuboid::new(vec3(0.5, 0.5, 1.0)));
 		// Build the collider.
-		let collider = Collider::new(&mut colliders, rigid_body.handle, cuboid);
+		let collider = Collider::new(&mut physics_engine.colliders, rigid_body.handle, cuboid);
 
 		obj2.borrow_mut().rigid_body.replace(rigid_body);
 		obj2.borrow_mut().collider.replace(collider);
 
+		// Add Body to mapa_teste
+		let map_scale = 32.0;
+		let rigid_body = RigidBody::new(&mut physics_engine.bodies, BodyStatus::Static, 0.0, 0.0);
+    let map_shape = ShapeHandle::new(shape::Compound::new(vec![
+				(Isometry::from_parts(Translation3::new(map_scale*0.0, map_scale*(-0.4375), 0.0), UnitQuaternion::identity()), ShapeHandle::new(shape::Cuboid::new(vec3(1.0, 0.125, 1.0) * map_scale/2.0))),
+				(Isometry::from_parts(Translation3::new(map_scale*-0.375,map_scale* -0.125, 0.0), UnitQuaternion::identity()), ShapeHandle::new(shape::Cuboid::new(vec3(0.250, 0.5, 1.0)* map_scale/2.0))),
+				(Isometry::from_parts(Translation3::new(map_scale*-0.125,map_scale* -0.250, 0.0), UnitQuaternion::identity()), ShapeHandle::new(shape::Cuboid::new(vec3(0.250, 0.250, 1.0)* map_scale/2.0))),
+				(Isometry::from_parts(Translation3::new(map_scale*0.375, map_scale*-0.1875, 0.0), UnitQuaternion::identity()), ShapeHandle::new(shape::Cuboid::new(vec3(0.250, 0.375, 1.0) * map_scale/2.0))),
+				]));
+    //let cuboid = ShapeHandle::new(shape::Cuboid::new(vec3(1.0, 1.0, 1.0)));
+
+		// Build the collider.
+		let collider = Collider::new(&mut physics_engine.colliders, rigid_body.handle, map_shape);
+
+		mapa_obj.borrow_mut().rigid_body.replace(rigid_body);
+		mapa_obj.borrow_mut().collider.replace(collider);
+
+		// Position and scale of the map
+		mapa_obj.borrow_mut().transform.as_mut().unwrap().set_scale(&vec3(map_scale, map_scale, 1.0));
+
 		let mut scene = scene::scene_tree::Scene::new();
-		//obj1.transform.as_mut().unwrap().model_mat[4] = 1.5;
-		scene.add_child("root", &obj1);
+		scene.add_child("root", &player_obj);
 		scene.add_child("root", &obj2);
+		scene.add_child("root", &mapa_obj);
+		scene.add_camera("root", &camera_obj);
 
 		let params = glium::DrawParameters {
 				depth: glium::Depth {
@@ -137,17 +183,21 @@ fn main() {
     event_loop.run(move |event, _, control_flow| {
         match event {
             glutin::event::Event::WindowEvent { event, .. } => match event {
+
                 // Break from the main loop when the window is closed.
                 glutin::event::WindowEvent::CloseRequested => {
 										*control_flow = glutin::event_loop::ControlFlow::Exit;
 										return;
 								},
-                // Redraw the triangle when the window is resized.
+
+                // Update window size
                 glutin::event::WindowEvent::Resized(physical_size) => {
-										window_size.0 = physical_size.width;
-										window_size.1 = physical_size.height;
-										camera.aspect = window_size.0 as f32 / window_size.1 as f32;
+										renderer.window_size.0 = physical_size.width;
+										renderer.window_size.1 = physical_size.height;
+										camera_obj.borrow_mut().camera.as_mut().unwrap().aspect = renderer.window_size.0 as f32 / renderer.window_size.1 as f32;
                 },
+
+								// Process keyboard input
 								glutin::event::WindowEvent::KeyboardInput {
 										input: KeyboardInput { virtual_keycode: Some(virtual_code), state, .. },
 										..
@@ -158,13 +208,18 @@ fn main() {
 										},
 										_ => input.process_event(state, virtual_code)
 								}
+
+								// Process mouse position
 								glutin::event::WindowEvent::CursorMoved { position: pos, .. } => {
 										mouse_pos = (pos.x as u32, pos.y as u32);
-										//display.gl_window().window() .set_cursor_position(LogicalPosition::new(window_size.0 as f32 /2.0, window_size.1 as f32 /2.0));
 								},
+
+								// Process mouse input
 								glutin::event::WindowEvent::MouseInput { state: s, button: but, ..} =>
 										input.process_mouse_buttons(s, but),
 
+
+								// Process mouse wheel
 								glutin::event::WindowEvent::MouseWheel { delta , ..} => {
 										match delta {
 												glutin::event::MouseScrollDelta::PixelDelta(v) => {
@@ -176,9 +231,8 @@ fn main() {
 										}
 								}
 										
-                _ => {}, //*control_flow = glutin::event_loop::ControlFlow::Poll,
+                _ => {},
             },
-
 
 						// Rendering
 						glutin::event::Event::MainEventsCleared => {
@@ -189,138 +243,22 @@ fn main() {
 								last_instant = current_instant;
 								total_time += delta_time;
 
-								//println!("FPS:{}", 1.0/delta_time);
-
-								//objects[0].transform.model_mat = rotate(&objects[0].transform.model_mat, 1.0*delta_time, &::vec3(0.0, 1.0, 1.0));
-
-								// get screen resulution
-								let resolution = vec2(window_size.0 as f32, window_size.1 as f32);
-
-								// makes camera look to target
-								let aspect = window_size.0 as f32 / window_size.1 as f32;
-								camera.update_proj();
-								camera.update_view();
-
-								// Initiate Rendering
-								let mut target = display.draw();
-								target.clear_color_and_depth((0.0, 0.0, 0.0, 0.0), 1.0);
-
-								// Render objects
-								scene.foreach( |obj| {
-										// Get texture
-										let texture_cell = match &obj.texture {
-												Some(t) => t,
-												None => return,
-										};
-										let texture = &*RefCell::borrow(&texture_cell);
-
-										// Get transform
-										let transform = match &obj.transform {
-												Some(t) => t,
-												None => return,
-										};
-
-										// Get vertexBuffer
-										let vertex_buffer = match &obj.vertex_buffer {
-												Some(t) => t,
-												None => return,
-										};
-										let vertex_buffer = &*RefCell::borrow(&vertex_buffer);
-
-										// Get indexBuffer
-										let index_buffer = match &obj.index_buffer {
-												Some(t) => t,
-												None => return,
-										};
-										let index_buffer = index_buffer;
-
-										let id = mat4id();
-
-										let uniforms = uniform!{
-												view_mat: *camera.view_mat.as_ref(),
-												proj_mat: *camera.proj_mat.as_ref(),
-												iTime: total_time,
-												iResolution: *resolution.as_ref(),
-												trsf_mat: *transform.model_mat.as_ref(),
-												tex: texture 
-										};
-
-										target.draw(vertex_buffer, index_buffer, &shader.get_program(), &uniforms, &params).unwrap();
-								});
-
-
-
-								// Finish rendering
-								target.finish().unwrap();
+								renderer.render(&display, &scene, &shader, total_time);
 
 								// Reload shader
-								let _ = shader.reload(&display);
-								rsrc.reload_scripts();
+								//let _ = shader.reload(&display);
+								//rsrc.reload_scripts();
 
 								// Process Input
-								input.process_mouse_move(mouse_pos.0, mouse_pos.1, window_size);
+								input.process_mouse_move(mouse_pos.0, mouse_pos.1, renderer.window_size);
 
-								// update objects
-								(*scene.get_node("obj2").unwrap().borrow_mut()).obj.borrow_mut().update(delta_time, &input);
-
-								let move_sentivity = 10.0;
-								let look_sentivity = 200.0;
-
-								if input.get_mouse_button(input::MouseButtonKeyCode::Right) == KeyState::KeyDown {
-										match input.get_actions(input::ActionID::LOOK) {
-												ActionInput::DIRECTIONAL(dir) => {
-														camera.position.x += delta_time * look_sentivity * dir.x * camera.zoom;
-														camera.position.y -= delta_time * look_sentivity * dir.y * camera.zoom;
-												}
-												_ => (),
-										}
-								}
-
-								match input.get_actions(input::ActionID::ZOOM) {
-										ActionInput::ANALOGIC(v) => if camera.zoom - v*1.05 > 0.0 {
-												camera.zoom -= v*1.05;
-										}
-										else {
-												camera.zoom = 0.05;
-										}
-										_ => {}
-								}
-
-
-								match input.get_actions(input::ActionID::MOVE) {
-										ActionInput::DIRECTIONAL(dir) => {
-												//let front = camera.front * dir.y;
-												//let right = camera.front.cross(&camera.up) * dir.x;
-												//camera.position += delta_time*move_sentivity * (front + right);
-										},
-										_ => (),
-								}
-
-
-								// physics
+								// update objects behavior
 								scene.foreach_mut(|obj| {
-										match obj.rigid_body.as_ref() {
-												Some(rb) => {
-														let rb_handle = rb.handle;
-														let rigid_body = bodies.rigid_body(rb_handle).unwrap();
-														let v = rigid_body.position().translation;
-														let pos = Vec3::new(v.x, v.y, 0.0);
-														let angle = rigid_body.position().rotation.angle();
-														obj.transform.as_mut().unwrap().set_position(&pos);
-														obj.transform.as_mut().unwrap().set_2d_rotation(angle);
-												},
-												None => {},
-										}
+										obj.update(delta_time, &input);
 								});
 
-								// Run the physics simulation.
-								mechanical_world.step(
-										&mut geometrical_world,
-										&mut bodies,
-										&mut colliders,
-										&mut joint_constraints,
-										&mut force_generators
-								);
+
+								physics_engine.step(&mut scene);
 
 
 								input.update();

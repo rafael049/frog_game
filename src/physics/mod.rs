@@ -1,31 +1,53 @@
+pub mod physics_engine;
+
 use crate::*;
 
-use nphysics2d::{object::{DefaultBodyHandle,
+use glium::buffer::Content;
+use nphysics3d::{object::{DefaultBodyHandle,
 												 DefaultColliderHandle,
 												 RigidBodyDesc,
 												 ColliderDesc,
-												 DefaultBodySet, DefaultColliderSet, BodyPartHandle, BodyStatus}, ncollide2d::shape::ShapeHandle, math::Velocity};
+												 DefaultBodySet, DefaultColliderSet, BodyPartHandle, BodyStatus}, ncollide3d::shape::ShapeHandle};
+use nphysics3d::object;
+use nphysics3d::nalgebra::Vector3;
 
 pub struct RigidBody {
 		pub handle: DefaultBodyHandle,
+		body: *mut object::RigidBody<f32>,
 }
 
 impl RigidBody {
-		pub fn new(bodies: &mut DefaultBodySet<f32>, x: f32, y: f32) -> RigidBody {
+		pub fn new(bodies: &mut DefaultBodySet<f32>, status: BodyStatus, x: f32, y: f32) -> RigidBody {
 				// Build the rigid body.
-				let mut rb = RigidBodyDesc::new()
-						.status(BodyStatus::Dynamic)
-						.rotation(0.5)
-						.translation(Vector2::new(x, y))
+				let rb = RigidBodyDesc::new()
+						.status(status)
+						//.rotation(0.5)
+						.translation(vec3(x, y, 0.0))
 						.sleep_threshold(None)
 						.mass(1.0)
+						.kinematic_translations(Vector3::new(false, false, true))
+						.kinematic_rotations(Vector3::new(true, true, false))
 						//.velocity(Velocity::angular(0.1))
 						.build();
-				//rb.set_deactivation_threshold(None);
-				//rb.set_mass(2.0);
 				let handle: DefaultBodyHandle = bodies.insert(rb);
+				let mut body: *mut object::RigidBody<f32>;
+				unsafe {
+						body = bodies.rigid_body_mut(handle).unwrap() as *mut object::RigidBody<f32>;
+				}
 
-				RigidBody { handle }
+				RigidBody { handle, body }
+		}
+
+		pub fn get_body_mut(&mut self) -> &mut object::RigidBody<f32> {
+				unsafe {
+						return self.body.as_mut().unwrap();
+				}
+		}
+
+		pub fn get_body(&self) -> &object::RigidBody<f32> {
+				unsafe {
+						return self.body.as_ref().unwrap();
+				}
 		}
 }
 

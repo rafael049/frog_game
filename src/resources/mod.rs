@@ -103,13 +103,13 @@ impl Resources {
 						Mesh{
 								id: 0,
 								vertex: vec![
-										Vertex { position: [-1.0, -1.0, 0.0], normal: [0.0, 0.0, 0.0], color:[0.0, 0.0, 1.0], uv: [0.0, 0.0]},
-										Vertex { position: [ 1.0, -1.0, 0.0],  normal: [0.0, 0.0, 0.0], color:[0.0, 0.0, 1.0], uv: [1.0, 0.0]},
-										Vertex { position: [ 1.0,  1.0, 0.0],  normal: [0.0, 0.0, 0.0], color:[0.0, 0.0, 1.0], uv: [1.0, 1.0]},
+										Vertex { position: [-0.5, -0.5, 0.0], normal: [0.0, 0.0, 0.0], color:[0.0, 0.0, 1.0], uv: [0.0, 0.0]},
+										Vertex { position: [ 0.5, -0.5, 0.0],  normal: [0.0, 0.0, 0.0], color:[0.0, 0.0, 1.0], uv: [1.0, 0.0]},
+										Vertex { position: [ 0.5,  0.5, 0.0],  normal: [0.0, 0.0, 0.0], color:[0.0, 0.0, 1.0], uv: [1.0, 1.0]},
 
-										Vertex { position: [-1.0,  1.0, 0.0],  normal: [0.0, 0.0, 0.0], color:[0.0, 0.0, 1.0], uv: [0.0, 1.0]},
-										Vertex { position: [-1.0, -1.0, 0.0], normal: [0.0, 0.0, 0.0], color:[0.0, 0.0, 1.0], uv: [0.0, 0.0]},
-										Vertex { position: [ 1.0,  1.0, 0.0], normal: [0.0, 0.0, 0.0], color:[0.0, 0.0, 1.0], uv: [1.0, 1.0]},
+										Vertex { position: [-0.5,  0.5, 0.0],  normal: [0.0, 0.0, 0.0], color:[0.0, 0.0, 1.0], uv: [0.0, 1.0]},
+										Vertex { position: [-0.5, -0.5, 0.0], normal: [0.0, 0.0, 0.0], color:[0.0, 0.0, 1.0], uv: [0.0, 0.0]},
+										Vertex { position: [ 0.5,  0.5, 0.0], normal: [0.0, 0.0, 0.0], color:[0.0, 0.0, 1.0], uv: [1.0, 1.0]},
 								],
 								index: vec![],
 						};
@@ -171,7 +171,7 @@ impl Resources {
 				for mut rcell_script in self.scripts.values() {
 						let mut script = RefCell::borrow_mut(&rcell_script);
 						script.file.sync_all().unwrap();
-						let mut modified_date = script.file.metadata().unwrap().modified().unwrap();
+						let modified_date = script.file.metadata().unwrap().modified().unwrap();
 
 						if modified_date > script.mod_date {
 								script.file.seek(std::io::SeekFrom::Start(0)).unwrap();
